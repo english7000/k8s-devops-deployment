@@ -1,0 +1,95 @@
+###  创建SERVICE链接下面的pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: devops
+  labels:
+    devops: enable
+spec:
+  type: ClusterIP
+  ports:
+### 多个port的写法
+  - port: 5432
+    name: connection
+#  clusterIP: None
+  selector:
+    devops: enable
+
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+### 这下面的报考metadata以及spec都是定义的pod的属性，包括标签。
+metadata:
+  name: postgres
+  namespace: devops
+spec:
+  selector:
+    matchLabels:
+      devops: enable
+  serviceName: "devops"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+       devops: enable
+### 这下面才是一些选择
+    spec:
+      nodeSelector:
+        devops: enable
+      containers:
+      - name: postgres
+        image: postgres:13.2
+        env:
+        - name: "POSTGRES_USER"
+          value: "root"
+        - name: "POSTGRES_PASSWORD"
+          value: "root"
+        - name: "POSTGRES_DB"
+          value: "sonar"
+        - name: "TZ"
+          value: "Asia/Shanghai"
+
+        ports:
+        - containerPort: 5432
+          name: connection
+        volumeMounts:
+        - name: postgres-conf
+          mountPath: /var/lib/postgresql
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/dataaa
+        volumeMounts:
+        - name: localtime
+          mountPath: /etc/localtime
+ 
+      volumes:
+        - name: localtime
+          hostPath:
+            path: /etc/localtime 
+
+###注意多PVC定义的方式和写法
+  volumeClaimTemplates:
+  - metadata:
+       name: postgres-conf
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        limits:
+          storage: 10Gi
+        requests:
+          storage: 5Gi
+      storageClassName: rook-ceph-block
+      volumeMode: Filesystem
+  - metadata:
+       name: postgres-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        limits:
+          storage: 20Gi
+        requests:
+          storage: 10Gi
+      storageClassName: rook-ceph-block
+      volumeMode: Filesystem

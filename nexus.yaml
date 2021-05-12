@@ -10,7 +10,7 @@ metadata:
 #    nginx.ingress.kubernetes.io/secure-backends: "true"
 #    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
 #    nginx.ingress.kubernetes.io/use-regex: "true"
-  name: jenkins
+  name: nexus
   namespace: devops
 spec:
 #  tls:
@@ -18,13 +18,13 @@ spec:
 #    - k8s-dashboard.com
 #    secretName: kubernetes-dashboard-certs
   rules:
-  - host: jenkins.com
+  - host: nexus.com
     http:
       paths:
       - backend:
-          serviceName: jenkins
+          serviceName: nexus
 ###    目前只暴露了8080端口用于web使用
-          servicePort: 8080
+          servicePort: 8081
         path: /
 
 
@@ -33,7 +33,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: jenkins
+  name: nexus
   namespace: devops
   labels:
     devops: enable
@@ -41,10 +41,8 @@ spec:
   type: ClusterIP
   ports:
 ### 多个port的写法
-  - port: 8080
+  - port: 8081
     name: web
-  - port: 50000
-    name: slave
 #  clusterIP: None
   selector:
     devops: enable
@@ -55,7 +53,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 ### 这下面的报考metadata以及spec都是定义的pod的属性，包括标签。
 metadata:
-  name: jenkins
+  name: nexus
   namespace: devops
 spec:
   selector:
@@ -72,41 +70,25 @@ spec:
       nodeSelector:
         devops: enable
       containers:
-      - name: jenkins
-        image: jenkins/jenkins:2.277.3-lts-centos7
+      - name: nexus
+        image: docker.io/sonatype/nexus3:3.30.1
         ports:
-        - containerPort: 8080
+        - containerPort: 8081
           name: web
-        - containerPort: 50000
-          name: slave
         volumeMounts:
-        - name: jenkins-storage
-          mountPath: /var/jenkins_home
-        volumeMounts:
-        - name: jenkins-blue-ocean
-          mountPath: jenkinsci/blueocean
+        - name: nexus-storage
+          mountPath: /nexus-data
 
 ###注意多PVC定义的方式和写法
   volumeClaimTemplates:
   - metadata:
-       name: jenkins-storage
+       name: nexus-storage
     spec:
       accessModes: [ "ReadWriteOnce" ]
       resources:
         limits:
           storage: 10Gi
         requests:
-          storage: 3Gi
-      storageClassName: rook-ceph-block
-      volumeMode: Filesystem
-  - metadata:
-       name: jenkins-blue-ocean
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        limits:
-          storage: 10Gi
-        requests:
-          storage: 1Gi
+          storage: 5Gi
       storageClassName: rook-ceph-block
       volumeMode: Filesystem
