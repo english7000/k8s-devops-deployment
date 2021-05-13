@@ -10,7 +10,7 @@ metadata:
 #    nginx.ingress.kubernetes.io/secure-backends: "true"
 #    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
 #    nginx.ingress.kubernetes.io/use-regex: "true"
-  name: gitlab
+  name: mysql
   namespace: devops
 spec:
 #  tls:
@@ -18,13 +18,13 @@ spec:
 #    - k8s-dashboard.com
 #    secretName: kubernetes-dashboard-certs
   rules:
-  - host: gitlab.com
+  - host: mysql.com
     http:
       paths:
       - backend:
-          serviceName: gitlab
+          serviceName: mysql
 ###    目前只暴露了8080端口用于web使用
-          servicePort: 80
+          servicePort: 3306
         path: /
 
 
@@ -33,7 +33,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: gitlab
+  name: mysql
   namespace: devops
   labels:
     devops: enable
@@ -41,90 +41,56 @@ spec:
   type: ClusterIP
   ports:
 ### 多个port的写法
-  - port: 80
-    name: web
-  - port: 22
-    name: ssh
-  - port: 443
-    name: https
+  - port: 3306
+    name: connection
 #  clusterIP: None
   selector:
     devops: enable
 
 
+
+
 ---
 apiVersion: apps/v1
 kind: StatefulSet
-### 这下面的报考metadata以及spec都是定义的pod的属性，包括标签。
 metadata:
-  name: gitlab
+  name: mysql
   namespace: devops
 spec:
   selector:
     matchLabels:
-      gitlab: enable
-  serviceName: "gitlab"
+      devops: enable
+  serviceName: "mysql"
   replicas: 1
   template:
     metadata:
       labels:
-        gitlab: enable
-### 这下面才是一些选择
+        devops: enable
     spec:
       nodeSelector:
-        gitlab: enable
+        devops: enable
       containers:
-      - name: gitlab
-        image: gitlab/gitlab-ee:13.11.3-ee.0
+      - name: mysql
+        image: mysql:5.7
+        env:                        
+        - name: MYSQL_ROOT_PASSWORD
+          value: "password"
         ports:
-        - containerPort: 80
-          name: web
-        - containerPort: 22
-          name: ssh
-        - containerPort: 443
-          name: https
+        - containerPort: 3306
         volumeMounts:
-        - name: gitlab-config
-          mountPath: /etc/gitlab
-        volumeMounts:
-        - name: gitlab-log
-          mountPath: /var/log/gitlab
-        volumeMounts:
-        - name: gitlab-data
-          mountPath: /var/opt/gitlab
+        - name: mysql-storage
+          mountPath: /var/lib/mysql 
 
-###注意多PVC定义的方式和写法
   volumeClaimTemplates:
   - metadata:
-       name: gitlab-config
+       name: mysql-storage
     spec:
       accessModes: [ "ReadWriteOnce" ]
       resources:
         limits:
-          storage: 15Gi
-        requests:
           storage: 10Gi
+        requests:
+          storage: 5Gi
       storageClassName: rook-ceph-block
       volumeMode: Filesystem
-  - metadata:
-       name: gitlab-log
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        limits:
-          storage: 15Gi
-        requests:
-          storage: 10Gi
-      storageClassName: rook-ceph-block
-      volumeMode: Filesystem
-  - metadata:
-       name: gitlab-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        limits:
-          storage: 15Gi
-        requests:
-          storage: 10Gi
-      storageClassName: rook-ceph-block
-      volumeMode: Filesystem
+
