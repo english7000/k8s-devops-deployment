@@ -1,95 +1,76 @@
-###  创建SERVICE链接下面的pod
-apiVersion: v1
-kind: Service
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: postgres
+  name: postgres-sonar
   namespace: devops
   labels:
-    devops: enable
+    app: postgres-sonar
 spec:
-  type: ClusterIP
-  ports:
-### 多个port的写法
-  - port: 5432
-    name: connection
-#  clusterIP: None
-  selector:
-    devops: enable
-
-
----
-apiVersion: apps/v1
-kind: StatefulSet
-### 这下面的报考metadata以及spec都是定义的pod的属性，包括标签。
-metadata:
-  name: postgres
-  namespace: devops
-spec:
+  replicas: 1
   selector:
     matchLabels:
-      devops: enable
-  serviceName: "devops"
-  replicas: 1
+      app: postgres-sonar
   template:
     metadata:
       labels:
-       devops: enable
-### 这下面才是一些选择
+        app: postgres-sonar
     spec:
-      nodeSelector:
-        devops: enable
       containers:
-      - name: postgres
-        image: postgres:13.2
-        env:
-        - name: "POSTGRES_USER"
-          value: "root"
-        - name: "POSTGRES_PASSWORD"
-          value: "root"
-        - name: "POSTGRES_DB"
-          value: "sonar"
-        - name: "TZ"
-          value: "Asia/Shanghai"
-
+      - name: postgres-sonar
+        image: postgres:11.4
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5432
-          name: connection
+        env:
+        - name: POSTGRES_DB
+          value: "sonarDB"
+        - name: POSTGRES_USER
+          value: "sonarUser"
+        - name: POSTGRES_PASSWORD 
+          value: "123456"
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2048Mi
+          requests:
+            cpu: 500m
+            memory: 1024Mi
         volumeMounts:
-        - name: postgres-conf
-          mountPath: /var/lib/postgresql
-        volumeMounts:
-        - name: postgres-data
-          mountPath: /var/lib/postgresql/dataaa
-        volumeMounts:
-        - name: localtime
-          mountPath: /etc/localtime
- 
+          - name: data
+            mountPath: /var/lib/postgresql/data
+            subPath: postgres
       volumes:
-        - name: localtime
-          hostPath:
-            path: /etc/localtime 
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-data
 
-###注意多PVC定义的方式和写法
-  volumeClaimTemplates:
-  - metadata:
-       name: postgres-conf
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        limits:
-          storage: 10Gi
-        requests:
-          storage: 5Gi
-      storageClassName: rook-ceph-block
-      volumeMode: Filesystem
-  - metadata:
-       name: postgres-data
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        limits:
-          storage: 20Gi
-        requests:
-          storage: 10Gi
-      storageClassName: rook-ceph-block
-      volumeMode: Filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data 
+  namespace: devops
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-sonar
+  namespace: devops
+  labels:
+    app: postgres-sonar
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    protocol: TCP
+    targetPort: 5432
+  selector:
+    app: postgres-sonar

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: heketi-secret
+  namespace: glusterfs
+data:
+  # base64 encoded password. E.g.: echo -n "mypassword" | base64
+  key: YWRtaW5rZXk=
+type: kubernetes.io/glusterfs
+
+---
+apiVersion: storage.k8s.io/v1beta1
+kind: StorageClass
+metadata:
+  name: glusterfs
+provisioner: kubernetes.io/glusterfs
+allowVolumeExpansion: true
+parameters:
+  resturl: "http://192.168.14.35:18080"
+  clusterid: "4e55abe0e123b22274323bd21384918c"
+  restauthenabled: "true"
+  restuser: "admin"
+  #secretNamespace: "default"
+  #secretName: "heketi-secret"
+  restuserkey: "123456"
+  gidMin: "40000"
+  gidMax: "50000"
+  volumetype: "replicate:2"

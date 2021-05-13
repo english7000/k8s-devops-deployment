@@ -1,0 +1,108 @@
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    kubernetes.io/ingress.class: nginx     #这里要注意一下，这里的nginx是在部署ingress的时候就设定的名字可以使用kubectl describe daemonsets.apps -n ingress-nginx 查看
+### ingress部分注释掉的都是https的annotations
+
+#    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#    nginx.ingress.kubernetes.io/rewrite-target: /
+#    nginx.ingress.kubernetes.io/secure-backends: "true"
+#    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+#    nginx.ingress.kubernetes.io/use-regex: "true"
+  name: gitlab
+  namespace: devops
+spec:
+#  tls:
+#  - hosts:
+#    - k8s-dashboard.com
+#    secretName: kubernetes-dashboard-certs
+  rules:
+  - host: gitlab.com
+    http:
+      paths:
+      - backend:
+          serviceName: gitlab
+###    目前只暴露了8080端口用于web使用
+          servicePort: 80
+        path: /
+
+
+---
+###  创建SERVICE链接下面的pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: gitlab
+  namespace: devops
+  labels:
+    devops: enable
+spec:
+  type: ClusterIP
+  ports:
+### 多个port的写法
+  - port: 80
+    name: web
+  - port: 22
+    name: ssh
+  - port: 443
+    name: https
+#  clusterIP: None
+  selector:
+    devops: enable
+
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+### 这下面的报考metadata以及spec都是定义的pod的属性，包括标签。
+metadata:
+  name: gitlab
+  namespace: devops
+spec:
+  selector:
+    matchLabels:
+#     devops: enable
+      gitlab: enable
+  serviceName: "devops"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+       gitlab: enable
+### 这下面才是一些选择
+    spec:
+      nodeSelector:
+#        devops: enable
+        gitlab: enable
+      containers:
+      - name: gitlab
+        image: gitlab/gitlab-ee:13.11.3-ee.0
+        ports:
+        - containerPort: 80
+          name: web
+        - containerPort: 22
+          name: ssh
+        - containerPort: 443
+          name: https
+        volumeMounts:
+        - name: gitlab-config
+          mountPath: /etc/gitlab
+        volumeMounts:
+        - name: gitlab-log
+          mountPath: /var/log/gitlab
+        volumeMounts:
+        - name: gitlab-data
+          mountPath: /var/opt/gitlab
+      volumes:
+      - name: gitlab-data
+        hostPath:
+          path: /root/gitlab/data
+      - name: gitlab-log
+        hostPath:
+          path: /root/gitlab/log
+      - name: gitlab-config
+        hostPath:
+          path: /root/gitlab/config
+
+
